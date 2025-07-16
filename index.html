@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Hit the Vampire</title>
+    <style>
+        /* Basic styles for the body and game container */
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #main-container {
+            display: flex;
+            flex-direction: row; /* Default for desktop */
+            justify-content: center;
+            align-items: flex-start;
+            gap: 20px;
+            width: 100%;
+            height: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #game-container {
+            width: 100%;
+            max-width: 800px;
+            height: 100%;
+            max-height: 90vh; /* Use viewport height */
+            border: 5px solid #444;
+            border-radius: 20px;
+            background-color: #2a2a2a;
+            background-image: url('https://www.transparenttextures.com/patterns/dark-castle.png');
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+            cursor: none; /* Hide the default cursor */
+        }
+
+        /* Styling for the score and timer display */
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 2em;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+            pointer-events: none;
+        }
+
+        /* The garlic that follows the cursor/finger */
+        #hand {
+            width: 70px;
+            height: 70px;
+            background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M344 96c-26.51 0-48 21.49-48 48s21.49 48 48 48 48-21.49 48-48-21.49-48-48-48zm-176 0c-26.51 0-48 21.49-48 48s21.49 48 48 48 48-21.49 48-48-21.49-48-48-48zM256 32C114.6 32 0 146.6 0 288c0 79.53 35.59 150.1 90.36 198.1 23.38 20.61 52.24 31.9 81.64 31.9H340c29.4 0 58.26-11.29 81.64-31.9C476.4 438.1 512 367.5 512 288 512 146.6 397.4 32 256 32z' fill='%23f5f5dc'/%3e%3c/svg%3e");
+            background-size: contain;
+            background-repeat: no-repeat;
+            position: absolute;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            transition: transform 0.05s ease-out; /* Faster follow for touch */
+            z-index: 101;
+            filter: drop-shadow(2px 2px 3px rgba(0,0,0,0.5));
+            display: none; /* Hide until game starts and first move */
+        }
+
+        #hand.smacking {
+            transform: translate(-50%, -50%) scale(0.8) rotate(15deg);
+        }
+
+        /* The vampire monster element */
+        #monster {
+            width: 70px;
+            height: 70px;
+            position: absolute;
+            cursor: pointer;
+            transition: top 0.08s ease-out, left 0.08s ease-out; 
+        }
+        
+        /* Modal Styles */
+        .modal-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+        }
+
+        .modal-content {
+            background-color: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            font-size: 1em;
+            width: 85%;
+            max-width: 450px;
+            border: 2px solid #444;
+        }
+
+        .modal-content h2 { margin-top: 0; color: #ffc107; font-size: 1.5em; }
+        .modal-content button {
+            background-color: #ffc107;
+            color: #1a1a1a;
+            border: none;
+            padding: 12px 22px;
+            font-size: 1em;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background-color 0.3s, transform 0.2s;
+            font-weight: bold;
+        }
+        
+        #vampire-taunt { margin-top: 15px; min-height: 30px; font-style: italic; color: #ff6b6b; font-weight: bold; }
+        .loader { border: 4px solid #f3f3f3; border-radius: 50%; border-top: 4px solid #8e44ad; width: 25px; height: 25px; animation: spin 1s linear infinite; display: none; margin: 15px auto 0 auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Leaderboard Styles */
+        #leaderboard-container {
+            width: 300px;
+            height: 90vh;
+            max-height: 600px;
+            background-color: #2a2a2a;
+            border: 5px solid #444;
+            border-radius: 20px;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        #leaderboard-container h2 { text-align: center; margin-top: 0; color: #ffc107; }
+        #leaderboard { list-style: none; padding: 0; margin: 0; overflow-y: auto; flex-grow: 1; }
+        #leaderboard li { display: flex; justify-content: space-between; padding: 8px 12px; border-radius: 8px; margin-bottom: 8px; background-color: #333; }
+        
+        #how-to-play-button {
+            position: absolute;
+            bottom: 15px;
+            right: 15px;
+            width: 40px;
+            height: 40px;
+            background-color: #555;
+            color: white;
+            border: 2px solid #777;
+            border-radius: 50%;
+            font-size: 1.5em;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Score Submission Form */
+        #score-submission input.error {
+            border: 2px solid red;
+            animation: shake 0.5s;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        /* Responsive Design for Mobile */
+        @media (max-width: 800px) {
+            #main-container {
+                flex-direction: column;
+                align-items: center;
+                height: auto;
+                overflow-y: auto;
+            }
+            #game-container {
+                height: 60vh; /* Adjust height for mobile */
+                min-height: 400px;
+            }
+            #leaderboard-container {
+                width: 90%;
+                height: auto;
+                max-height: 40vh; /* Allow scrolling */
+            }
+            #ui-container {
+                font-size: 1.5em;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="main-container">
+        <div id="game-container">
+            <div id="ui-container">
+                <div id="score">Score: 0</div>
+                <div id="timer">Time: 30</div>
+            </div>
+            <div id="monster">
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M20,30 Q50,10 80,30 L90,70 Q50,95 10,70 Z" fill="#4a4a4a"/>
+                    <path d="M30,60 L25,75 L40,65 Z" fill="white"/>
+                    <path d="M70,60 L75,75 L60,65 Z" fill="white"/>
+                    <circle cx="35" cy="45" r="5" fill="red"/>
+                    <circle cx="65" cy="45" r="5" fill="red"/>
+                </svg>
+            </div>
+            <div id="hand"></div>
+            <div id="game-over-modal" class="modal-overlay" style="display: none;">
+                 <div class="modal-content">
+                    <h2>Game Over!</h2>
+                    <p id="final-score"></p>
+                    <div id="score-submission">
+                        <input type="text" id="player-name" placeholder="Enter your name">
+                        <button id="submit-score-button">Submit Score</button>
+                    </div>
+                    <div id="submission-feedback" style="display:none; color: #28a745; font-weight: bold; margin-top: 15px;"></div>
+                    <div id="vampire-taunt"></div>
+                    <div class="loader"></div>
+                    <button id="gemini-button">✨ Get Vampire's Reaction</button>
+                    <button id="restart-button">Play Again</button>
+                </div>
+            </div>
+            <div id="how-to-play-modal" class="modal-overlay" style="display: none;">
+                <div class="modal-content">
+                    <h2>How to Play</h2>
+                    <ul>
+                        <li>Move your mouse or finger to control the garlic 🧄.</li>
+                        <li>Click or tap the vampire 🧛 to hit it.</li>
+                        <li>You have 30 seconds. Be warned: The vampire is extremely fast!</li>
+                    </ul>
+                    <button id="close-how-to-play">Got it!</button>
+                </div>
+            </div>
+        </div>
+        <div id="leaderboard-container">
+            <h2>🏆 Leaderboard</h2>
+            <ul id="leaderboard"></ul>
+            <button id="how-to-play-button">?</button>
+        </div>
+    </div>
+
+    <script type="module">
+        // --- Firebase Imports ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- DOM Elements ---
+        const gameContainer = document.getElementById('game-container');
+        const monster = document.getElementById('monster');
+        const scoreDisplay = document.getElementById('score');
+        const hand = document.getElementById('hand');
+        const timerDisplay = document.getElementById('timer');
+        const gameOverModal = document.getElementById('game-over-modal');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const restartButton = document.getElementById('restart-button');
+        const geminiButton = document.getElementById('gemini-button');
+        const vampireTauntDisplay = document.getElementById('vampire-taunt');
+        const loader = document.querySelector('.loader');
+        const leaderboardList = document.getElementById('leaderboard');
+        const playerNameInput = document.getElementById('player-name');
+        const submitScoreButton = document.getElementById('submit-score-button');
+        const scoreSubmissionDiv = document.getElementById('score-submission');
+        const submissionFeedback = document.getElementById('submission-feedback');
+        const howToPlayModal = document.getElementById('how-to-play-modal');
+        const howToPlayButton = document.getElementById('how-to-play-button');
+        const closeHowToPlayButton = document.getElementById('close-how-to-play');
+
+        // --- Game State ---
+        let score = 0;
+        let timeLeft = 30;
+        let gameInterval = null;
+        let monsterMoveInterval = null;
+        let isGameActive = false;
+        const difficultSpeedInterval = 350;
+
+        // --- Firebase State ---
+        let db, auth;
+        let scoresCollection;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+
+        async function initializeFirebase() {
+            if (Object.keys(firebaseConfig).length === 0) {
+                console.error("Firebase config is not available.");
+                return;
+            }
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                const scoresPath = `/artifacts/${appId}/public/data/scores`;
+                scoresCollection = collection(db, scoresPath);
+                listenForScores();
+            } catch (error) {
+                console.error("Firebase Initialization Error:", error);
+            }
+        }
+
+        function listenForScores() {
+            const q = query(collection(db, `/artifacts/${appId}/public/data/scores`));
+            onSnapshot(q, (snapshot) => {
+                const scores = [];
+                snapshot.forEach((doc) => scores.push(doc.data()));
+                scores.sort((a, b) => b.score - a.score);
+                updateLeaderboardUI(scores.slice(0, 15));
+            }, (error) => console.error("Error fetching scores: ", error));
+        }
+        
+        function updateLeaderboardUI(scores) {
+            leaderboardList.innerHTML = '';
+            if (scores.length === 0) {
+                leaderboardList.innerHTML = '<li>Be the first to set a score!</li>';
+                return;
+            }
+            scores.forEach(score => {
+                const li = document.createElement('li');
+                li.innerHTML = `<span class="score-name">${score.name}</span> <span class="score-value">${score.score}</span>`;
+                leaderboardList.appendChild(li);
+            });
+        }
+
+        async function submitScore() {
+            const playerName = playerNameInput.value.trim();
+            playerNameInput.classList.remove('error');
+
+            if (!playerName) {
+                // BUG FIX: Replaced alert with visual feedback
+                playerNameInput.classList.add('error');
+                setTimeout(() => playerNameInput.classList.remove('error'), 500);
+                return;
+            }
+            submitScoreButton.disabled = true;
+            submitScoreButton.textContent = 'Submitting...';
+            try {
+                await addDoc(scoresCollection, {
+                    name: playerName,
+                    score: score,
+                    createdAt: serverTimestamp()
+                });
+                scoreSubmissionDiv.style.display = 'none';
+                submissionFeedback.textContent = 'Score Submitted!';
+                submissionFeedback.style.display = 'block';
+            } catch (error) {
+                console.error("Error adding document: ", error);
+                submissionFeedback.textContent = 'Submission Failed. Please try again.';
+                submissionFeedback.style.color = 'red';
+                submissionFeedback.style.display = 'block';
+                submitScoreButton.disabled = false;
+                submitScoreButton.textContent = 'Submit Score';
+            }
+        }
+
+        // --- Game Logic ---
+        function moveMonster() {
+            if (!isGameActive) return;
+            const rect = gameContainer.getBoundingClientRect();
+            const monsterWidth = monster.clientWidth;
+            const monsterHeight = monster.clientHeight;
+            const randomX = Math.random() * (rect.width - monsterWidth);
+            const randomY = Math.random() * (rect.height - monsterHeight);
+            monster.style.left = `${randomX}px`;
+            monster.style.top = `${randomY}px`;
+        }
+
+        function hitMonster(event) {
+            if (!isGameActive) return;
+            event.stopPropagation();
+            event.preventDefault();
+            score++;
+            scoreDisplay.textContent = `Score: ${score}`;
+            monster.style.transform = 'scale(1.2)';
+            setTimeout(() => {
+                monster.style.transform = 'scale(1)';
+                moveMonster();
+            }, 150);
+            clearInterval(monsterMoveInterval);
+            monsterMoveInterval = setInterval(moveMonster, difficultSpeedInterval); 
+        }
+
+        function updateTimer() {
+            timeLeft--;
+            timerDisplay.textContent = `Time: ${timeLeft}`;
+            if (timeLeft <= 0) {
+                endGame();
+            }
+        }
+
+        function addEventListeners() {
+            gameContainer.addEventListener('mousemove', handleMove, { passive: false });
+            gameContainer.addEventListener('touchmove', handleMove, { passive: false });
+            gameContainer.addEventListener('mousedown', smackHand);
+            gameContainer.addEventListener('touchstart', smackHand, { passive: false });
+            monster.addEventListener('mousedown', hitMonster);
+            monster.addEventListener('touchstart', hitMonster, { passive: false });
+        }
+
+        function removeEventListeners() {
+            gameContainer.removeEventListener('mousemove', handleMove);
+            gameContainer.removeEventListener('touchmove', handleMove);
+            gameContainer.removeEventListener('mousedown', smackHand);
+            gameContainer.removeEventListener('touchstart', smackHand);
+            monster.removeEventListener('mousedown', hitMonster);
+            monster.removeEventListener('touchstart', hitMonster);
+        }
+
+        function startGame() {
+            isGameActive = true;
+            score = 0;
+            timeLeft = 30;
+            scoreDisplay.textContent = 'Score: 0';
+            timerDisplay.textContent = 'Time: 30';
+            gameOverModal.style.display = 'none';
+            vampireTauntDisplay.textContent = ''; 
+            geminiButton.style.display = 'inline-block';
+            scoreSubmissionDiv.style.display = 'none';
+            submissionFeedback.style.display = 'none';
+            submitScoreButton.disabled = false;
+            submitScoreButton.textContent = 'Submit Score';
+            playerNameInput.value = '';
+            
+            moveMonster();
+            
+            clearInterval(gameInterval);
+            clearInterval(monsterMoveInterval);
+
+            gameInterval = setInterval(updateTimer, 1000);
+            monsterMoveInterval = setInterval(moveMonster, difficultSpeedInterval); 
+            
+            addEventListeners();
+        }
+
+        function endGame() {
+            isGameActive = false;
+            hand.style.display = 'none';
+            clearInterval(gameInterval);
+            clearInterval(monsterMoveInterval);
+            finalScoreDisplay.textContent = `Your final score is: ${score}`;
+            gameOverModal.style.display = 'flex';
+            scoreSubmissionDiv.style.display = 'block';
+            removeEventListeners();
+        }
+
+        // --- Hand Movement and Animation ---
+        function handleMove(event) {
+            if (!isGameActive) return;
+            event.preventDefault();
+            hand.style.display = 'block'; // Show hand on first move
+            const rect = gameContainer.getBoundingClientRect();
+            let x, y;
+            if (event.type.startsWith('touch')) {
+                x = event.touches[0].clientX - rect.left;
+                y = event.touches[0].clientY - rect.top;
+            } else {
+                x = event.clientX - rect.left;
+                y = event.clientY - rect.top;
+            }
+            hand.style.left = `${x}px`;
+            hand.style.top = `${y}px`;
+        }
+
+        function smackHand(event) {
+            if (!isGameActive) return;
+            // Prevent smacking when tapping the monster itself on touch devices
+            if (event.type === 'touchstart' && event.target.closest('#monster')) return;
+            
+            hand.classList.add('smacking');
+            setTimeout(() => {
+                hand.classList.remove('smacking');
+            }, 150);
+        }
+        
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                const voices = window.speechSynthesis.getVoices();
+                let selectedVoice = voices.find(voice => voice.name.includes('Google UK English Male')) || voices.find(voice => voice.name.includes('Daniel')) || voices.find(voice => voice.lang.startsWith('en-') && voice.name.includes('Male'));
+                utterance.voice = selectedVoice;
+                utterance.pitch = 0.8;
+                utterance.rate = 0.9;
+                utterance.volume = 1;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        // --- Gemini API Call ---
+        async function getVampireTaunt() {
+            geminiButton.style.display = 'none';
+            loader.style.display = 'block';
+            vampireTauntDisplay.textContent = '';
+            const prompt = `You are an arrogant and theatrical vampire who just played a game against a human. The player's final score was ${score}. Write a short, roasting taunt to the player based on their score. Belittle their slow, clumsy effort in a dramatic, over-the-top way, but do not use abusive slurs. Keep it under 25 words.`;
+            const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+            const apiKey = ""; // Provided by environment
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
+                    const text = result.candidates[0].content.parts[0].text.replace(/"/g, '');
+                    vampireTauntDisplay.innerHTML = `Vampire roasts: "<em>${text}</em>"`;
+                    speak(text);
+                } else {
+                    const fallbackText = "The vampire is too disgusted to even speak to you.";
+                    vampireTauntDisplay.textContent = fallbackText;
+                    speak(fallbackText);
+                }
+            } catch (error) {
+                console.error("Error fetching taunt:", error);
+                const errorText = "The vampire is plotting your demise...";
+                vampireTauntDisplay.textContent = errorText;
+                speak(errorText);
+            } finally {
+                loader.style.display = 'none';
+            }
+        }
+        
+        // --- Modal Logic ---
+        function showHowToPlay() {
+            howToPlayModal.style.display = 'flex';
+        }
+
+        function hideHowToPlay() {
+            howToPlayModal.style.display = 'none';
+            localStorage.setItem('vampireSlayerVisited', 'true');
+            if (!isGameActive) {
+                startGame();
+            }
+        }
+
+        // --- Event Listeners ---
+        restartButton.addEventListener('click', startGame);
+        geminiButton.addEventListener('click', getVampireTaunt);
+        submitScoreButton.addEventListener('click', submitScore);
+        howToPlayButton.addEventListener('click', showHowToPlay);
+        closeHowToPlayButton.addEventListener('click', hideHowToPlay);
+        
+        // --- Initial Load ---
+        window.onload = () => {
+            initializeFirebase();
+            if ('speechSynthesis' in window) {
+                // This is a common trick to make sure voices are loaded
+                speechSynthesis.onvoiceschanged = () => {
+                    speechSynthesis.getVoices();
+                };
+            }
+            if (!localStorage.getItem('vampireSlayerVisited')) {
+                showHowToPlay();
+            } else {
+                startGame();
+            }
+        };
+    </script>
+</body>
+</html>
