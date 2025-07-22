@@ -148,7 +148,31 @@
         }
         #leaderboard-container h2 { text-align: center; margin-top: 0; color: #ffc107; }
         #leaderboard { list-style: none; padding: 0; margin: 0; overflow-y: auto; flex-grow: 1; }
-        #leaderboard li { display: flex; justify-content: space-between; padding: 8px 12px; border-radius: 8px; margin-bottom: 8px; background-color: #333; }
+        #leaderboard li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            background-color: #333;
+            position: relative;
+            transition: transform 0.2s ease-in-out, background-color 0.2s ease-in-out;
+        }
+        #leaderboard li .rank {
+            font-weight: bold;
+            color: #aaa;
+            margin-right: 10px;
+        }
+        #leaderboard li .player-name {
+            flex-grow: 1;
+            text-align: left;
+        }
+        #leaderboard li.highlight-player {
+            background-color: #6a1b9a;
+            border: 1px solid #ffc107;
+            transform: scale(1.03);
+        }
         
         #how-to-play-button {
             position: absolute;
@@ -228,7 +252,7 @@
                         <input type="text" id="player-name" placeholder="Enter your name">
                         <button id="submit-score-button">Submit Score</button>
                     </div>
-                    <div id="submission-feedback" style="display:none; color: #28a745; font-weight: bold; margin-top: 15px;"></div>
+                    <div id="submission-feedback" style="display:none; font-weight: bold; margin-top: 15px;"></div>
                     <div id="vampire-taunt"></div>
                     <div class="loader"></div>
                     <button id="gemini-button">✨ Get Vampire's Reaction</button>
@@ -288,16 +312,19 @@
         let monsterMoveInterval = null;
         let isGameActive = false;
         const difficultSpeedInterval = 350;
+        let lastSubmittedDocId = null; 
 
         // --- Firebase State ---
         let db, auth;
         let scoresCollection;
+        let isFirebaseReady = false;
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
 
         async function initializeFirebase() {
             if (Object.keys(firebaseConfig).length === 0) {
                 console.error("Firebase config is not available.");
+                isFirebaseReady = false;
                 return;
             }
             try {
@@ -311,17 +338,22 @@
                 }
                 const scoresPath = `/artifacts/${appId}/public/data/scores`;
                 scoresCollection = collection(db, scoresPath);
+                isFirebaseReady = true; // Set flag when ready
                 listenForScores();
             } catch (error) {
                 console.error("Firebase Initialization Error:", error);
+                isFirebaseReady = false;
             }
         }
 
         function listenForScores() {
-            const q = query(collection(db, `/artifacts/${appId}/public/data/scores`));
+            if (!isFirebaseReady) return;
+            const q = query(scoresCollection);
             onSnapshot(q, (snapshot) => {
                 const scores = [];
-                snapshot.forEach((doc) => scores.push(doc.data()));
+                snapshot.forEach((doc) => {
+                    scores.push({ id: doc.id, ...doc.data() });
+                });
                 scores.sort((a, b) => b.score - a.score);
                 updateLeaderboardUI(scores.slice(0, 15));
             }, (error) => console.error("Error fetching scores: ", error));
@@ -333,19 +365,30 @@
                 leaderboardList.innerHTML = '<li>Be the first to set a score!</li>';
                 return;
             }
-            scores.forEach(score => {
+            scores.forEach((scoreData, index) => {
                 const li = document.createElement('li');
-                li.innerHTML = `<span class="score-name">${score.name}</span> <span class="score-value">${score.score}</span>`;
+                li.innerHTML = `<span class="rank">${index + 1}</span><span class="player-name">${scoreData.name}</span><div class="player-score">${scoreData.score}</div>`;
+                
+                if (lastSubmittedDocId && scoreData.id === lastSubmittedDocId) {
+                    li.classList.add('highlight-player');
+                }
                 leaderboardList.appendChild(li);
             });
         }
 
         async function submitScore() {
-            const playerName = playerNameInput.value.trim();
             playerNameInput.classList.remove('error');
 
+            // BUG FIX: Check if Firebase is ready before attempting to submit.
+            if (!isFirebaseReady || !scoresCollection) {
+                submissionFeedback.textContent = 'Connection error. Please try again later.';
+                submissionFeedback.style.color = 'red';
+                submissionFeedback.style.display = 'block';
+                return;
+            }
+
+            const playerName = playerNameInput.value.trim();
             if (!playerName) {
-                // BUG FIX: Replaced alert with visual feedback
                 playerNameInput.classList.add('error');
                 setTimeout(() => playerNameInput.classList.remove('error'), 500);
                 return;
@@ -353,13 +396,15 @@
             submitScoreButton.disabled = true;
             submitScoreButton.textContent = 'Submitting...';
             try {
-                await addDoc(scoresCollection, {
+                const docRef = await addDoc(scoresCollection, {
                     name: playerName,
                     score: score,
                     createdAt: serverTimestamp()
                 });
+                lastSubmittedDocId = docRef.id;
                 scoreSubmissionDiv.style.display = 'none';
                 submissionFeedback.textContent = 'Score Submitted!';
+                submissionFeedback.style.color = '#28a745';
                 submissionFeedback.style.display = 'block';
             } catch (error) {
                 console.error("Error adding document: ", error);
@@ -426,6 +471,7 @@
 
         function startGame() {
             isGameActive = true;
+            lastSubmittedDocId = null; 
             score = 0;
             timeLeft = 30;
             scoreDisplay.textContent = 'Score: 0';
